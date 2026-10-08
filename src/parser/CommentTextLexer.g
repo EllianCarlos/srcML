@@ -232,7 +232,17 @@ COMMENT_TEXT {
                 in_squotes = true;
         }
         (options { greedy = true; } :
-            { !skip_dquote_processing && (prevLA != '\\' || noescape) }?
+            // in C, C++, and Objective-C, "a""b" is two adjacent string literals:
+            // the quote that ends a string must not take the quote that starts the next one
+            {
+                !skip_dquote_processing
+                && (prevLA != '\\' || noescape)
+                && !(
+                    mode == STRING_END
+                    && !noescape
+                    && (inLanguage(LANGUAGE_C) || inLanguage(LANGUAGE_CXX) || inLanguage(LANGUAGE_OBJECTIVE_C))
+                )
+            }?
             '\042'
             {
                 ++dquote_count;
