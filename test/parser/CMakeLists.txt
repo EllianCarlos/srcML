@@ -17,3 +17,4 @@ else()
 endif()
 
 add_subdirectory(testsuite)
+add_subdirectory(termination)

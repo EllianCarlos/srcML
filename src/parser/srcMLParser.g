@@ -766,6 +766,11 @@ public:
     bool in_template_param = false;
     int start_count = 0;
 
+    // The token at which the function-name rule last matched nothing; see
+    // statement_part's function-identifier alternative. A reference, not a
+    // pointer, keeps that token alive, so no later token can reuse its address.
+    antlr::RefToken function_name_stuck_at;
+
     static const antlr::BitSet keyword_name_token_set;
     static const antlr::BitSet keyword_token_set;
     static const antlr::BitSet macro_call_token_set;
@@ -5387,6 +5392,7 @@ statement_part[] {
         CALL_TYPE type = NOCALL;
         bool isempty = false;
         int call_count = 0;
+        antlr::RefToken function_name_start;
         ENTRY_DEBUG
 } :
         { inMode(MODE_EAT_TYPE) }?
@@ -5610,7 +5616,21 @@ statement_part[] {
 
         // function identifier
         { inMode(MODE_FUNCTION_NAME) }?
-        function_header[0] |
+        { function_name_start = LT(1); }
+        function_header[0]
+        {
+            // function_header[0] can match nothing, e.g., at auto after a type that a
+            // leading macro made too long. Once is harmless: another rule can still
+            // consume that token. Twice at the same token is a loop, because start()
+            // calls this rule again in the same state, so leave function-name mode.
+            if (LT(1).get() != function_name_start.get())
+                function_name_stuck_at = antlr::RefToken();
+            else if (function_name_stuck_at.get() == function_name_start.get()) {
+                function_name_stuck_at = antlr::RefToken();
+                clearMode(MODE_FUNCTION_NAME);
+            } else
+                function_name_stuck_at = function_name_start;
+        } |
 
         // function identifier
         { inMode(MODE_FUNCTION_PARAMETER) }?

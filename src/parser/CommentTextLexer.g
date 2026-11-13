@@ -112,6 +112,19 @@ public:
         skip_squote_processing = false, is_multiple_squotes = false, in_squotes = false;
     }
 
+    // true when the quote at LA(1) opens a string that a quote closes later on the same line
+    bool quoteClosesOnLine() {
+        for (int i = 2; ; ++i) {
+            const int c = LA(i);
+            if (c == EOF_CHAR || c == '\n')
+                return false;
+            if (c == '\\')
+                ++i;
+            else if (c == '\042')
+                return true;
+        }
+    }
+
     OPTION_TYPE options;
 
 CommentTextLexer(const antlr::LexerSharedInputState& state, int language)
@@ -232,7 +245,19 @@ COMMENT_TEXT {
                 in_squotes = true;
         }
         (options { greedy = true; } :
-            { !skip_dquote_processing && (prevLA != '\\' || noescape) }?
+            // in C, C++, and Objective-C, "a""b" is two adjacent string literals:
+            // the quote that ends a string must not take the quote that starts the next one,
+            // unless that quote has no partner on the line: then the run is one token, as before
+            {
+                !skip_dquote_processing
+                && (prevLA != '\\' || noescape)
+                && !(
+                    mode == STRING_END
+                    && !noescape
+                    && (inLanguage(LANGUAGE_C) || inLanguage(LANGUAGE_CXX) || inLanguage(LANGUAGE_OBJECTIVE_C))
+                    && quoteClosesOnLine()
+                )
+            }?
             '\042'
             {
                 ++dquote_count;
